@@ -1,0 +1,5 @@
+#!/bin/sh
+cd "$(mktemp -d)";
+go mod init local-playground;
+echo -e 'package main\n\nimport (\n\t"fmt"\n)\n\nfunc main() {\n\tfmt.Println("aloha")\n}\n' > main.go;
+$EDITOR main.go;

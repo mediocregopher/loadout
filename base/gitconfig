@@ -1,0 +1,29 @@
+[push]
+    default = simple
+
+[alias]
+    #Shows diff in log
+    ll = log --stat --abbrev-commit
+
+    #Show all aliases
+    alias = !git config --list | grep 'alias\\.' | sed 's/alias\\.\\([^=]*\\)=\\(.*\\)/\\1\\t=> \\2/' | sort
+
+    #Full sync of local database
+    sync = fetch -pv --all
+
+    cam = commit -a -m
+    lug = log --color --graph --date=short --pretty=format:'%Cgreen%cd (%cr)%Creset %C(bold blue)%an%Creset %Cred%h%Creset -%C(yellow)%d%Creset %s' --abbrev-commit
+    purr = pull --rebase
+    chk = checkout
+    from = !git fetch origin master && git rebase -i origin/master
+
+    # print local branches and their last commit times
+    blanch = for-each-ref --sort=authordate --format '%(HEAD)%(align:left,40)%(refname:short)%(end) | %(align:left,20)%(authordate:iso)%(end) | %(subject)' refs/heads
+
+    # checkout master and delete previously checked out branch
+    close = !git checkout master && git branch -D @{-1}
+
+[color]
+    branch = auto
+    diff = auto
+    status = auto

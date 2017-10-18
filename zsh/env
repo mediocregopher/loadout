@@ -1,0 +1,18 @@
+#Global stuff shitty programs use
+export EDITOR=~/.nix-profile/bin/nvim
+
+#Basics
+export PATH=$PATH:/bin
+export PATH=$PATH:/usr/bin
+export PATH=$PATH:/usr/local/bin
+
+#my shit
+export PATH=~/bin:$PATH
+
+#Go has its own path system. Way to be difficult go
+export GOPATH=~/.go
+export GOBIN=$GOPATH/bin
+export PATH=$GOPATH/bin:$PATH
+
+# GPG is needy
+export GPG_TTY=$(tty)

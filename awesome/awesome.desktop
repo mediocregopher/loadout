@@ -1,0 +1,9 @@
+# For use in ubuntu, just copy into /usr/share/xsessions
+
+[Desktop Entry]
+Name=awesome
+Comment=Highly configurable framework window manager
+Exec=/home/mediocregopher/.nix-profile/bin/awesome
+Type=Application
+Icon=/usr/share/pixmaps/awesome.xpm
+Keywords=Window manager
