@@ -15,6 +15,9 @@
 
   awesome = pkgs.writeScriptBin "awesome" ''
     #!${pkgs.bash}/bin/bash
+
+    export BROWSER=/usr/bin/google-chrome
+
     echo "[$(date)] New awesome session starting" > ~/.awesome.log
     exec ${pkgs.awesome}/bin/awesome \
       -c ${cfg}/rc.lua \

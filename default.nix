@@ -59,6 +59,7 @@
 
       pkgs.xsel
       pkgs.pavucontrol
+      pkgs.xdg-utils
 
       (pkgs.nerdfonts.override { fonts = [ "SourceCodePro" ]; })
 
