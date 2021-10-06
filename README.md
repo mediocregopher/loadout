@@ -73,31 +73,33 @@ binary:
 ./Mediocre_Loadout-x86_64.AppImage nvim
 ```
 
+NOTE that the AppImage doesn't like working with files within `/tmp`. I don't
+know of a workaround for this at the moment.
+
 # Available Components
 
 Components of the loadout can be run separate from the others, depending on what
 you're trying to do. The following components are available to be run:
 
-* `zsh` (`shell` in the AppImage): My terminal shell. There's some customization
+* `zsh`: My terminal shell. There's some customization
   to it but it should be pretty self-explanatory to "just use".
 
-* `nvim` (`editor` in the AppImage): My neovim development environment, plus all
-  plugins I use. I mostly work in golang, so it's most tuned for that, but it
-  does fine for general dev work. `Ctrl-N` will open NerdTree, `<backslash>tn`
-  will open a terminal tab, and `<backslash>th`/`<backslash>tl` can be used to
-  navigate tabs. There's a lot more customization that's been done, see the
-  `nvim/init.vim` file.
+* `nvim`: My neovim development environment, plus all plugins I use. I mostly
+  work in golang, so it's most tuned for that, but it does fine for general dev
+  work. `Ctrl-N` will open NerdTree, `<backslash>tn` will open a terminal tab,
+  and `<backslash>th`/`<backslash>tl` can be used to navigate tabs. There's a
+  lot more customization that's been done, see the `nvim/init.vim` file.
 
-* `alacritty` (`gui` in the AppImage, might be broken): Terminal which I use.
-  Yes, I always use a light-mode theme, because I work in well lit spaces
-  generally. There's not much else to this.
+* `alacritty`: Terminal GUI which I use. Yes, I always use a light-mode theme,
+  because I work in well lit spaces generally. There's not much else to this.
 
-* `awesome` (`wm` in the AppImage, almost definitely broken): My window manager.
-  There's so much customization I couldn't begin to start. `Meta+Enter` should
-  open a terminal, where `Meta` is probably the windows key on your keyboard.
+* `awesome`: My window manager. There's so much customization I couldn't begin
+  to start. `Meta+Enter` should open a terminal, where `Meta` is probably the
+  windows key on your keyboard.
 
 # Status
 
 This configuration is still fairly new, and so expect it to be fairly broken.
 I'll be updating it as I go though, so it should stabalize into something
-functional.
+functional. I don't test the AppImage build very much, it's more of a gimick,
+but the shell and dev environment should work well from it at least.

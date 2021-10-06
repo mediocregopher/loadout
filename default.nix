@@ -69,62 +69,55 @@
     ];
   };
 
-  appimageEntrypoint = pkgs.writeScriptBin "mediocre-loadout" ''
+  appimageEntrypoint = pkgs.writeScript "mediocre-loadout" ''
     #!${pkgs.bash}/bin/bash
 
     cmd="$1"; shift;
 
-    if [ "$cmd" = "editor" ]; then exec nvim "$@"; fi
-    if [ "$cmd" = "shell" ]; then exec zsh "$@"; fi
-    if [ "$cmd" = "gui" ]; then exec alacritty "$@"; fi
-    if [ "$cmd" = "wm" ]; then exec awesome "$@"; fi
+    if [ "$cmd" = "nvim" ]; then exec nvim "$@"; fi
+    if [ "$cmd" = "zsh" ]; then exec zsh "$@"; fi
+    if [ "$cmd" = "alacritty" ]; then exec alacritty "$@"; fi
+    if [ "$cmd" = "awesome" ]; then exec awesome "$@"; fi
 
-    echo "USAGE: $0 [editor|shell|gui|wm] [passthrough args...]"
+    echo "USAGE: $0 [nvim|zsh|alacritty|awesome] [passthrough args...]"
     exit 1
   '';
 
-  appimageIcon = pkgs.stdenv.mkDerivation {
-    name = "mediocre-loadout-icon";
-    src = ./bonzi.png;
-    builder = builtins.toFile "builder.sh" ''
-      source $stdenv/setup
-      dir=share/icons/hicolor/256x256/apps
-      mkdir -p "$out"/$dir
-      cp $src "$out"/$dir/mediocre-loadout.png
-    '';
-  };
-
-  appimageDesktopFile = pkgs.writeTextDir "share/applications/mediocre-loadout.desktop" ''
+  appimageDesktopFile = builtins.toFile "mediocre-loadout.desktop" ''
     [Desktop Entry]
     Name=Mediocre Loadout
-    Exec=mediocre-loadout gui
+    Exec=mediocre-loadout alacritty
     Icon=mediocre-loadout
     Type=Application
     Categories=Utility;
   '';
 
-  appimageTarget = pkgs.buildEnv {
-    name = "mediocre-loadout-target";
-    paths = [
-      loadout
-      appimageEntrypoint
-      appimageIcon
-      appimageDesktopFile
-    ];
-  };
-
-  appimageTargetFlat = pkgs.stdenv.mkDerivation {
+  appdir = pkgs.stdenv.mkDerivation {
     name = "mediocre-loadout-target-flat";
-    src = appimageTarget;
+
+    inherit appimageEntrypoint appimageDesktopFile;
+    appimageIcon = ./bonzi.png;
+    src = loadout;
+
     builder = builtins.toFile "builder.sh" ''
       source $stdenv/setup
+
       cp -rL "$src" "$out"
+      chmod -R +w "$out"
+
+      rm -rf "$out"/share/applications/*
+      cp "$appimageDesktopFile" "$out"/share/applications/mediocre-loadout.desktop
+      cp "$appimageEntrypoint" "$out"/bin/mediocre-loadout
+
+      icondir=share/icons/hicolor/256x256/apps
+      mkdir -p "$out"/$icondir
+      cp "$appimageIcon" "$out"/$icondir/mediocre-loadout.png
     '';
   };
 
   appimage = ((import ./appimage.nix) { pkgsSrc = pkgsSrc; }) {
     name = "mediocre-loadout";
-    target = appimageTargetFlat;
+    target = appdir;
   };
 
 }
