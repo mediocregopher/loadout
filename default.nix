@@ -1,13 +1,34 @@
 {
 
-  pkgsSrc ? ./pkgs.nix
+  hostConfig,
 
-}: rec {
+  pkgs ? (import ./pkgs.nix).stable {},
+  pkgs2305 ? (import ./pkgs.nix).stable2305 {},
 
-  pkgs = (import pkgsSrc) {};
+}: let
 
-  gitConfig = pkgs.writeTextDir "git/config"
-    (builtins.readFile ./base/gitconfig);
+  config = (import ./config/default.nix) // hostConfig ;
+
+in rec {
+
+  gitConfig = pkgs.stdenv.mkDerivation {
+    name = "mediocregopher-git-config";
+
+    gitConfigBase = ./base/gitconfig;
+    gitConfigCustom = builtins.toFile "mediocregopher-git-config-custom"
+      (pkgs.lib.generators.toGitINI config.git);
+
+    builder = builtins.toFile "builder.sh" ''
+      source $stdenv/setup
+
+      dir="$out"/git
+      mkdir -p "$dir"
+
+      cp "$gitConfigBase" "$dir"/config
+      cp "$gitConfigCustom" "$dir"/custom
+    '';
+
+  };
 
   git = pkgs.writeScriptBin "git" ''
     #!${pkgs.bash}/bin/bash
@@ -15,21 +36,22 @@
     exec ${pkgs.git}/bin/git "$@"
   '';
 
-  zsh = ((import ./zsh) { inherit pkgs; }).zsh;
+  zsh = ((import ./zsh) { inherit config; }).zsh;
 
   loadout = pkgs.buildEnv {
     name = "loadout";
     paths = [
+      pkgs2305.nix
 
       pkgs.gnugrep
       pkgs.ag
       pkgs.gawk
+      pkgs.tree
 
       git
       pkgs.mercurial
       pkgs.breezy # bzr
 
-      pkgs.gcc
       pkgs.gnumake
       pkgs.cmake
       pkgs.strace
@@ -43,11 +65,14 @@
       pkgs.nmap
       pkgs.dnsutils
       pkgs.openssh
+      pkgs.sshfs
+      pkgs.fuse3
 
       pkgs.tmux
 
       pkgs.ncdu
       pkgs.htop
+      pkgs.jnettop
 
       pkgs.unzip
       pkgs.unrar
@@ -55,70 +80,22 @@
 
       pkgs.jq
       pkgs.yq
-      pkgs.go
 
-      pkgs.xsel
-      pkgs.pavucontrol
-      pkgs.xdg-utils
+      pkgs.tomb
+      pkgs.udiskie
 
-      (pkgs.nerdfonts.override { fonts = [ "SourceCodePro" ]; })
-
-      ((import ./nvim) { inherit pkgs; }).nvim
+      ((import ./nvim) {}).nvim
       zsh
-      ((import ./alacritty) { inherit pkgs zsh; }).alacritty
-      ((import ./awesome) { inherit pkgs; }).awesome
+      ((import ./alacritty) { inherit config zsh; }).alacritty
+      ((import ./awesome) { inherit config; }).awesome
     ];
   };
 
-  appimageEntrypoint = pkgs.writeScript "mediocre-loadout" ''
-    #!${pkgs.bash}/bin/bash
-
-    cmd="$1"; shift;
-
-    if [ "$cmd" = "nvim" ]; then exec nvim "$@"; fi
-    if [ "$cmd" = "zsh" ]; then exec zsh "$@"; fi
-    if [ "$cmd" = "alacritty" ]; then exec alacritty "$@"; fi
-    if [ "$cmd" = "awesome" ]; then exec awesome "$@"; fi
-
-    echo "USAGE: $0 [nvim|zsh|alacritty|awesome] [passthrough args...]"
-    exit 1
-  '';
-
-  appimageDesktopFile = builtins.toFile "mediocre-loadout.desktop" ''
-    [Desktop Entry]
-    Name=Mediocre Loadout
-    Exec=mediocre-loadout alacritty
-    Icon=mediocre-loadout
-    Type=Application
-    Categories=Utility;
-  '';
-
-  appdir = pkgs.stdenv.mkDerivation {
-    name = "mediocre-loadout-target-flat";
-
-    inherit appimageEntrypoint appimageDesktopFile;
-    appimageIcon = ./bonzi.png;
-    src = loadout;
-
-    builder = builtins.toFile "builder.sh" ''
-      source $stdenv/setup
-
-      cp -rL "$src" "$out"
-      chmod -R +w "$out"
-
-      rm -rf "$out"/share/applications/*
-      cp "$appimageDesktopFile" "$out"/share/applications/mediocre-loadout.desktop
-      cp "$appimageEntrypoint" "$out"/bin/mediocre-loadout
-
-      icondir=share/icons/hicolor/256x256/apps
-      mkdir -p "$out"/$icondir
-      cp "$appimageIcon" "$out"/$icondir/mediocre-loadout.png
-    '';
+  fonts = pkgs.buildEnv {
+    name = "fonts";
+    paths = [
+      pkgs.nerdfonts
+      pkgs.source-code-pro
+    ];
   };
-
-  appimage = ((import ./appimage.nix) { pkgsSrc = pkgsSrc; }) {
-    name = "mediocre-loadout";
-    target = appdir;
-  };
-
 }

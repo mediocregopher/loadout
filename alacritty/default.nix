@@ -1,35 +1,49 @@
 {
 
-  pkgs ? (import ../pkgs.nix) {},
+  config,
+
+  pkgs ? (import ../pkgs.nix).stable2305 {},
   zsh ? pkgs.zsh,
 
 }: rec {
 
-  # TODO figure out a way to provide my font to alacritty at runtime. fontconfig
-  # is a hot mess...
-  #
-  #dataDir = pkgs.stdenv.mkDerivation {
-  #  name = "alacritty-dataDir";
-  #  src = ./fonts;
-  #  buildInputs = [ pkgs.fontconfig ];
-  #  builder = builtins.toFile "builder.sh" ''
-  #    source $stdenv/setup
-  #    mkdir "$out"
-  #    cp -r "$src" "$out"/fonts
-  #    chmod -R +w "$out"
+  defaultXDGOpenRules = [
+    {
+      name = "open-url";
+      pattern = "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)[^<>\"\\s{-}\\^⟨⟩`]+";
+      xdgOpen = "$1";
+    }
+  ];
 
-  #    env
+  xdgOpenRules = defaultXDGOpenRules ++ config.alacritty.xdgOpenRules;
 
-  #    export FONTCONFIG_FILE="$out"/fontconfig
-  #    fc-cache --verbose "$out"/fonts
+  hints = {
+    enabled = (builtins.map (r:
+      {
+        regex = r.pattern;
+        hyperlinks = true;
+        command = (pkgs.writeShellScript "alacritty-hints-${r.name}" ''
+          xdg-open "${r.xdgOpen}"
+        '');
+        post_processing = true;
+        mouse.enabled = true;
+      }
+    ) xdgOpenRules);
+  };
 
-  #  '';
-  #};
+  configFile = pkgs.writeText "alacritty-config" (
+    builtins.replaceStrings
+      ["$HINTS"]
+      [(builtins.toJSON hints)]
+      (builtins.readFile ./alacritty.yml)
+    );
 
   alacritty = pkgs.writeScriptBin "alacritty" ''
     #!${pkgs.bash}/bin/bash
-    exec ${pkgs.nixgl}/bin/nixGLIntel ${pkgs.alacritty}/bin/alacritty \
-      --config-file ${./alacritty.yml} \
+
+    exec ${pkgs.nixgl}/bin/nixGL ${pkgs.alacritty}/bin/alacritty \
+      -o font.size=${builtins.toString config.alacritty.fontSize} \
+      --config-file ${configFile} \
       -e "${zsh}/bin/zsh"
   '';
 }

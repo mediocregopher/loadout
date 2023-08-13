@@ -1,7 +1,14 @@
+[include]
+    path = custom
+
 [push]
     default = simple
 
 [alias]
+    # main-branch outputs 'main' if there is a main branch, otherwise it outputs
+    # 'master'
+    main-branch = "!if git rev-parse --verify main 2>1 >/dev/null; then echo 'main'; else echo 'master'; fi"
+
     #Shows diff in log
     ll = log --stat --abbrev-commit
 
@@ -15,15 +22,16 @@
     lug = log --color --graph --date=short --pretty=format:'%Cgreen%cd (%cr)%Creset %C(bold blue)%an%Creset %Cred%h%Creset -%C(yellow)%d%Creset %s' --abbrev-commit
     purr = pull --rebase
     chk = checkout
-    from = !git fetch origin master && git rebase -i origin/master
+    from = !git fetch origin "$(git main-branch)" && git rebase -i origin/"$(git main-branch)"
 
     # print local branches and their last commit times
     blanch = for-each-ref --sort=authordate --format '%(HEAD)%(align:left,40)%(refname:short)%(end) | %(align:left,20)%(authordate:iso)%(end) | %(subject)' refs/heads
 
-    # checkout master and delete previously checked out branch
-    close = !git checkout master && git branch -D @{-1}
+    # checkout master/main and delete previously checked out branch
+    close = !git checkout "$(git main-branch)" && git branch -D @{-1}
 
 [color]
     branch = auto
     diff = auto
     status = auto
+

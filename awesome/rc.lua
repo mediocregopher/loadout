@@ -1,7 +1,6 @@
 -- Standard awesome library
 local gears = require("gears")
 local awful = require("awful")
-awful.rules = require("awful.rules")
 require("awful.autofocus")
 -- Widget and layout library
 local wibox = require("wibox")
@@ -19,17 +18,13 @@ local function info(msg)
 end
 
 require("dirs")
-require("bat")
 require("pulseaudio")
 muteAll() -- pre-emptively mute all mics, just in-case
-
--- for sanity
-local home_dir = os.getenv("HOME").."/"
 
 -- {{{ Naughty config (the notification library)
 naughty.config.defaults.position = "bottom_right"
 naughty.config.defaults.width = 250
-naughty.config.defaults.icon=conf_dir .. "helper.png"
+naughty.config.defaults.icon=share_dir .. "helper.png"
 naughty.config.defaults.icon_size = 75
 -- }}}
 
@@ -67,15 +62,15 @@ local beautiful = require("beautiful")
 function rand_wp()
     local ls = io.popen("ls " .. wp_dir .. " | shuf -n1")
     local wp = ls:read("*l")
-    return wp_dir .. '/' .. wp
+    return wp_dir .. wp
 end
 
 function rand_wp_lock()
-    awful.spawn(conf_dir.."bin/random_i3lock.sh "..wp_dir, false)
+    awful.spawn(bin_dir.."random_i3lock.sh "..wp_dir, false)
 end
 
 local wp = rand_wp()
-local imgavg = io.popen("cat " .. wp .. " | " .. conf_dir .. "/bin/imgavg")
+local imgavg = io.popen("cat " .. wp .. " | " .. bin_dir .. "imgavg")
 local avgcolor = imgavg:read()
 local comcolor = imgavg:read()
 imgavg:close()
@@ -85,7 +80,7 @@ for s = 1, screen.count() do
 end
 -- }}}
 
-require("theme/theme")
+require("theme")
 local theme = load_theme(avgcolor, comcolor)
 beautiful.init(theme)
 
@@ -134,48 +129,6 @@ end
 menubar.utils.terminal = terminal -- Set the terminal for applications that require it
 
 -- {{{ Wibox
-
--- {{{ Battery widget
-local battimerintvl = 4
-batwidget = wibox.widget.textbox("")
-battimer = gears.timer({ timeout = battimerintvl })
-battimer:connect_signal("timeout",
-    function()
-        local batlevel, charging = batteryInfo()
-        if batlevel == nil then batlevel = "unk"
-        elseif (tonumber(batlevel) < 10) then
-            naughty.notify({
-                preset = naughty.config.presets.critical,
-                title="ALERT",
-                text="BATTERY LEVEL LOW",
-                timeout=battimerintvl-1,
-            })
-        end
-        if charging then
-            batwidget:set_markup('bat:'..batlevel)
-        else
-            batwidget:set_markup('<b>bat:'..batlevel..'</b>')
-        end
-    end)
-battimer:start()
--- }}}
-
--- {{{ sysstats widget
-sysstatswidget = wibox.widget.textbox("")
-sysstatstimer = gears.timer({ timeout = 1 })
-sysstatstimer:connect_signal("timeout",
-    function()
-        local sysstats = "??? STATS ???"
-        local f_sysstats = io.open("/tmp/sysstats")
-        if f_sysstats then
-            c_sysstats = f_sysstats:read()
-            f_sysstats:close()
-            if c_sysstats then sysstats = c_sysstats end
-        end
-        sysstatswidget:set_markup(sysstats)
-    end)
-sysstatstimer:start()
--- }}}
 
 -- {{{ notifier for when my mic isn't muted
 local unmuteNot
@@ -280,10 +233,6 @@ for s = 1, screen.count() do
     -- Widgets that are aligned to the right
     local right_sep = "  |  "
     local right_layout = wibox.layout.fixed.horizontal()
-    --right_layout:add(wibox.widget.textbox(right_sep))
-    right_layout:add(sysstatswidget)
-    right_layout:add(wibox.widget.textbox(right_sep))
-    right_layout:add(batwidget)
     right_layout:add(wibox.widget.textbox(right_sep))
     right_layout:add(wibox.widget.systray())
     right_layout:add(wibox.widget.textbox(right_sep))
@@ -381,7 +330,7 @@ globalkeys = awful.util.table.join(
     end),
 
     --PrintScreen
-    awful.key({}, "Print", false, function () awful.spawn(conf_dir.."bin/scrot-gobin.sh",false) end),
+    awful.key({}, "Print", false, function () awful.spawn(bin_dir.."scrot.sh",false) end),
     awful.key({ "Control" }, "Print", function ()
         local scr_dir = home_dir..'Screenshots'
         awful.spawn("mkdir -p "..scr_dir, false)
@@ -407,11 +356,11 @@ globalkeys = awful.util.table.join(
     end),
 
     awful.key( { }, "XF86MonBrightnessUp", function()
-        awful.spawn("/usr/bin/xbacklight -inc 5", false)
+        awful.spawn("brightnessctl s +5%", false)
     end),
 
     awful.key( { }, "XF86MonBrightnessDown", function()
-        awful.spawn("/usr/bin/xbacklight -dec 5", false)
+        awful.spawn("brightnessctl s 5%-", false)
     end),
 
     -- Push to talk
@@ -419,10 +368,8 @@ globalkeys = awful.util.table.join(
         awful.spawn("/usr/bin/pactl set-source-mute @DEFAULT_SOURCE@ 0")
     end,
         muteAll,
-    { })
-)
+    { }),
 
-globalkeys = awful.util.table.join(globalkeys,
     awful.key( { modkey }, "a", function()
         info(tostring(os.time()))
     end)
@@ -441,9 +388,25 @@ clientkeys = awful.util.table.join(
         end),
     awful.key({ modkey,           }, "m",
         function (c)
-            c.maximized_horizontal = not c.maximized_horizontal
-            c.maximized_vertical   = not c.maximized_vertical
-        end)
+            if c.maximized then
+                c.maximized = false
+            else
+                c.maximized_horizontal = not c.maximized_horizontal
+                c.maximized_vertical   = not c.maximized_vertical
+            end
+        end),
+
+    awful.key({ modkey }, "d", function (c)
+        info(gears.debug.dump_return(c, "client"))
+        info(gears.debug.dump_return({
+            maximized = c.maximized,
+            maximized_horizontal = c.maximized_horizontal,
+            maximized_vertical = c.maximized_vertical,
+            motif_wm_hints = c.motif_wm_hints,
+            is_fixed = c.is_fixed(),
+            immobilized = c.immobilized
+        }, "client_stuff"))
+    end)
 )
 
 -- Bind all key numbers to tags.
@@ -501,16 +464,26 @@ awful.rules.rules = {
                      focus = awful.client.focus.filter,
                      raise = true,
                      keys = clientkeys,
-                     buttons = clientbuttons } },
-    { rule = { class = "MPlayer" },
-      properties = { floating = true } },
-    { rule = { class = "pinentry" },
-      properties = { floating = true } },
-    { rule = { class = "gimp" },
-      properties = { floating = true } }
-    -- Set Firefox to always map on tags number 2 of screen 1.
-    -- { rule = { class = "Firefox" },
-    --   properties = { tag = tags[1][2] } },
+                     buttons = clientbuttons,
+                     screen = awful.screen.preferred,
+                     placement = awful.placement.no_overlap+awful.placement.no_offscreen
+      }
+    },
+
+    { rule = { class = "firefox" },
+      properties = { screen = 1, tag = "1" } },
+
+    { rule = { class = "lagrange" },
+      properties = { screen = 1, tag = "1" } },
+
+    { rule = { class = "zoom" },
+      properties = { screen = 1, tag = "5" } },
+
+    { rule = { class = "Signal" },
+      properties = { screen = 1, tag = "9" } },
+
+    { rule = { class = "Sylpheed" },
+      properties = { screen = 1, tag = "9" } },
 }
 -- }}}
 

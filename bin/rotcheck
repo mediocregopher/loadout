@@ -1,0 +1,353 @@
+#!/bin/sh
+set -uf
+IFS="$(printf '\n\t')"
+LC_ALL="C"
+
+# Copyright (C) 2019 Jamie Nguyen <j@jamielinux.com>
+#
+# A simple shell script to recursively generate, update and verify checksums
+# for files you care about. It's useful for detecting bit rot.
+#
+# It's written in POSIX shell, but requires GNU coreutils, BusyBox or some
+# other collection that includes similar checksum tools.
+
+VERSION=1.1.2
+COMMAND="sha512sum"
+CHECKFILE="./.rotcheck"
+
+APPEND_MODE=0
+CHECK_MODE=0
+DELETE_MODE=0
+UPDATE_MODE=0
+
+IGNORE_MISSING=0
+FOLLOW_SYMLINKS=1
+VERBOSE=0
+WARN_FORMATTING=0
+EXCLUDE_HIDDEN=0
+FORCE_UPDATE=0
+
+usage() {
+    cat << EOF
+rotcheck $VERSION
+Usage: rotcheck MODE [OPTIONS]
+   or: rotcheck MODE [OPTIONS] -- [DIRECTORY]... [ARBITRARY FIND OPTION]...
+Recursively generate, update and verify checksums.
+
+MODES:
+ -a           APPEND mode: Record checksums for any files without a checksum
+              already. Never modify existing checksums.
+ -c           CHECK mode: Check that files checksums are the same.
+ -d           DELETE mode: Remove checksums for files that don't exist.
+ -u           APPEND-AND-UPDATE mode: Like append-only mode, but also update
+              checksums for files with a modification date newer than the
+              the checksum file. (NB: Also see \`-M\`.)
+
+OPTIONS:
+ -b COMMAND   Checksum command to use. Default: sha512sum
+ -f FILE      File to store checksums. For relative paths, prefix with "./"
+              or the checksum file will be checksummed. Default: ./.rotcheck
+ -h           Display this help.
+ -n           Don't follow symlinks. The default is to follow symlinks.
+ -v           Be more verbose when adding, deleting, changing or verifying
+              checksums.
+ -w           Warn about improperly formatted checksum lines.
+ -x           Exclude all hidden files and directories when generating
+              checksums. The default is to include them.
+ -M           Use with \`-u\` to update checksums regardless of modification
+              time. This is very slow so avoid if possible; try \`touch\`
+              instead to bump the modification time of specific files.
+              WARNING: The checksums might have changed due to bit rot so
+              use this option with care!
+
+ (specific to GNU coreutils >= 8.25)
+ -i           Ignore missing files when verifying checksums.
+
+
+Supported commands:
+  GNU coreutils:
+    md5sum, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, b2sum
+
+  BusyBox (applets must be symlinked):
+    md5sum, sha1sum, sha256sum, sha512sum, sha3sum
+
+  BSD & macOS (install GNU coreutils):
+    gmd5sum, gsha1sum, gsha224sum, gsha256sum, gsha384sum, gsha512sum, gb2sum
+
+
+Examples:
+  # Create checksum file (located at "./.rotcheck"):
+  rotcheck -a
+
+  # You've added some new files and need to append some checksums:
+  rotcheck -va
+
+  # You've edited some files and need to update the checksums (for files with
+  # a modification time newer than the checksum file):
+  rotcheck -vu
+
+  # Verify checksums:
+  rotcheck -c
+
+  # Search other directories instead of the current directory.
+  # WARNING: checksums might get duplicated if mixing relative and absolute
+  # paths, or if you change the way you specify directory paths!
+  rotcheck -a -- /mnt/archive-2018/ /mnt/archive-2019/
+
+  # Exclude .git folders (these arguments are passed directly to find):
+  rotcheck -a -- ! -path '*/\\.git/*'
+
+EOF
+    exit 0
+}
+
+fail() {
+    printf '%s\n' "$@"; exit 1
+}
+
+# Curiously, I stumbled across a bug in bash-3.0.16 (c. 2004) or older
+# where \0177 (DEL) isn't handled properly. See the `find_safe` function below.
+# bash-3.1 (c. 2005), dash-0.5.2 (c. 2005), and zsh-3.1 (c. 2000) all work
+# and probably others too.
+if [ -n ${BASH+x} ] && [ -n ${BASH_VERSION+x} ]; then
+    if printf '%s' "${BASH_VERSION:-x}" | grep -qE '^[0-2]+|^3\.0'; then
+        fail "bash-3.0.16 and older are broken." \
+             "Try bash>=3.1, dash, zsh, or another POSIX shell."
+    fi
+fi
+
+# Command-line arguments. `getopts` is POSIX, while `getopt` is not.
+[ $# -gt 0 ] && [ "$1" = "--help" ] && usage
+while getopts ":acdub:f:hinvwxM" opt; do
+    case "$opt" in
+        a)  APPEND_MODE=1;;
+        c)  CHECK_MODE=1;;
+        d)  DELETE_MODE=1;;
+        u)  UPDATE_MODE=1;;
+        b)  COMMAND="$OPTARG";;
+        f)  CHECKFILE="$OPTARG";;
+        h)  usage;;
+        i)  IGNORE_MISSING=1;;
+        n)  FOLLOW_SYMLINKS=0;;
+        v)  VERBOSE=1;;
+        w)  WARN_FORMATTING=1;;
+        x)  EXCLUDE_HIDDEN=1;;
+        M)  FORCE_UPDATE=1;;
+        \?) fail "-$OPTARG: Invalid argument";;
+        :)  fail "-$OPTARG requires an argument";;
+    esac
+done; shift $(($OPTIND - 1))
+
+
+
+# A few sanity checks.
+MODE=$(($APPEND_MODE + $CHECK_MODE + $DELETE_MODE + $UPDATE_MODE))
+if [ $MODE -eq 0 ]; then
+    fail "Please specify one of -a, -c, -d, or -u." \
+         "See \`rotcheck -h\` for help with usage."
+elif [ $MODE -gt 1 ]; then
+    fail "You can only use one of -a, -c, -d, or -u options." \
+         "See \`rotcheck -h\` for help with usage."
+elif [ $CHECK_MODE -eq 1 ] || [ $DELETE_MODE -eq 1 ]; then
+    if [ ! -f "$CHECKFILE" ]; then
+        fail "$CHECKFILE: No such file." \
+             "Try running \`rotcheck -a\` first, or see \`rotcheck -h\`."
+    fi
+elif ! command -v "$COMMAND" >/dev/null 2>/dev/null; then
+    fail "$COMMAND: command not found" \
+         "Try specifying a supported command using \`rotcheck -b COMMAND\`." \
+         "You may need to install GNU coreutils or BusyBox." \
+         "On *BSD, GNU coreutils commands begin with 'g', like 'gsha512sum'." \
+         "See \`rotcheck -h\` for help with usage."
+fi
+
+# When printing text to terminal, make sure it won't do anything unexpected.
+printf_sanitized() {
+    printf '%s' "$@" | tr -d '[:cntrl:]' | iconv -cs -f UTF-8 -t UTF-8
+    printf '\n'
+}
+
+verify_checksums() {
+    IGNORE="" ; [ $IGNORE_MISSING -eq 1 ]  && IGNORE="--ignore-missing"
+    WARN=""   ; [ $WARN_FORMATTING -eq 1 ] && WARN="-w"
+    $COMMAND -c $WARN $IGNORE -- "$CHECKFILE"
+}
+
+# Just verify checksums.
+if [ $CHECK_MODE -eq 1 ]; then
+    # Only GNU coreutils supports `--quiet`, so use `grep -v` instead.
+    # Unfortunately, pipefail isn't POSIX so to return the exit status from the
+    # checksum command, we have to be clever (aka crazy) with file descriptors
+    # and subshells instead.
+    if [ $VERBOSE -eq 1 ]; then
+        verify_checksums
+        exit $?
+    else
+        exec 4>&1
+            (
+                exec 3>&1
+                    (
+                        # 2>&1 preserves order of stdout/stderr.
+                        verify_checksums 2>&1; printf '%d' $? 1>&3
+                    ) | grep -Ev ': OK$' 1>&4
+                exec 3>&-
+            ) | ( read -r retval; exit $retval ); retval=$?
+        exec 4>&-
+        exit $retval
+    fi
+fi
+
+# Delete checksums for files that no longer exist.
+if [ $DELETE_MODE -eq 1 ]; then
+    i=1
+    for file in $(cut -d ' ' -f 3- -- "$CHECKFILE"); do
+        # `sed -i` isn't POSIX (nor is `mktemp`), so use `ex` instead.
+        if [ ! -f "$file" ]; then
+            cat << EOF | ex -s -- "$CHECKFILE"
+${i}d
+x
+EOF
+            # Print what checksums were deleted.
+            if [ $VERBOSE -eq 1 ]; then
+                printf '%s' "DELETED: "
+                printf_sanitized "$file"
+            fi
+        else
+            # Only increment the line number if we didn't delete a line.
+            i=$(($i + 1))
+        fi
+    done
+    exit $?
+fi
+
+# For safety and sanity, ignore all filenames that have control characters
+# like newline, tab, delete etc.
+find_safe() {
+    FIND_L=""
+    FIND_FOLLOW=""
+    if [ $FOLLOW_SYMLINKS -eq 1 ]; then
+        # Old versions of findutils don't have -L. Use it if available.
+        if find -L / -maxdepth 0 -type d >/dev/null 2>/dev/null; then
+            FIND_L="-L"
+        else
+            FIND_FOLLOW="-follow"
+        fi
+    fi
+
+    # POSIX find requires that you specify the search path either first
+    # or immediately after -H/-L. Use current directory by default unless
+    # user has specified a path.
+    FIND_DOT="./"
+    if [ $# -gt 0 ]; then
+        first_char="$(printf '%s' "$1" | cut -c 1)"
+        # Replace search path unless first arg is a non-path `find` option.
+        if [ "$first_char" != "-" ] \
+                && [ "$first_char" != "!" ] && [ "$first_char" != "(" ]; then
+            FIND_DOT=""
+        fi
+    fi
+
+    HIDDEN=""
+    [ $EXCLUDE_HIDDEN -eq 1 ] && HIDDEN='*/\.*'
+
+    find $FIND_L $FIND_DOT "$@" $FIND_FOLLOW \
+        -type f ! -path "$CHECKFILE" ! -path "$HIDDEN" \
+        ! -name "$(printf '*%b*' '\0001')" ! -name "$(printf '*%b*' '\0002')" \
+        ! -name "$(printf '*%b*' '\0003')" ! -name "$(printf '*%b*' '\0004')" \
+        ! -name "$(printf '*%b*' '\0005')" ! -name "$(printf '*%b*' '\0006')" \
+        ! -name "$(printf '*%b*' '\0007')" ! -name "$(printf '*%b*' '\0010')" \
+        ! -name "$(printf '*%b*' '\0011')" ! -name "$(printf '*%b*' '\0012')" \
+        ! -name "$(printf '*%b*' '\0013')" ! -name "$(printf '*%b*' '\0014')" \
+        ! -name "$(printf '*%b*' '\0015')" ! -name "$(printf '*%b*' '\0016')" \
+        ! -name "$(printf '*%b*' '\0017')" ! -name "$(printf '*%b*' '\0020')" \
+        ! -name "$(printf '*%b*' '\0021')" ! -name "$(printf '*%b*' '\0022')" \
+        ! -name "$(printf '*%b*' '\0023')" ! -name "$(printf '*%b*' '\0024')" \
+        ! -name "$(printf '*%b*' '\0025')" ! -name "$(printf '*%b*' '\0026')" \
+        ! -name "$(printf '*%b*' '\0027')" ! -name "$(printf '*%b*' '\0030')" \
+        ! -name "$(printf '*%b*' '\0031')" ! -name "$(printf '*%b*' '\0032')" \
+        ! -name "$(printf '*%b*' '\0033')" ! -name "$(printf '*%b*' '\0034')" \
+        ! -name "$(printf '*%b*' '\0035')" ! -name "$(printf '*%b*' '\0036')" \
+        ! -name "$(printf '*%b*' '\0037')" ! -name "$(printf '*%b*' '\0177')"
+}
+
+find_updated_files() {
+    if [ $FORCE_UPDATE -eq 1 ]; then
+        find_safe "$@"
+    else
+        find_safe "$@" -newer "$CHECKFILE"
+    fi
+}
+
+# This function could be replaced entirely with the much simpler:
+#   cut -d ' ' -f 3- "$CHECKFILE" | grep -Fxn -- "$file" | cut -d ':' -f 1
+# But this function is slightly faster as it avoids passing huge chunks of text
+# (ie, the whole checksum file minus the first column) through a pipe.
+get_line_number() {
+    # Avoid `grep -E` as filename characters might get interpreted (eg, $).
+    for l in $(grep -Fn -- "$file" "$CHECKFILE" | cut -d ':' -f 1); do
+        if sed -n -e "${l}p" -- "$CHECKFILE" \
+                | cut -d ' ' -f 3- | grep -Fxq -- "$file" >/dev/null; then
+            printf '%d' "$l"
+            return 0
+        fi
+    done
+    printf '%d' "0"
+}
+
+umask 077
+# For files with a modification date newer than the checksum file, if there's
+# an existing checksum then update it. Otherwise append a new checksum.
+if [ $UPDATE_MODE -eq 1 ] && [ -f "$CHECKFILE" ]; then
+    for file in $(find_updated_files "$@"); do
+        line_num="$(get_line_number)"
+        if [ ${line_num:-0} -eq 0 ]; then
+            # No checksum yet, so append one.
+            $COMMAND -- "$file" >> "$CHECKFILE"
+        else
+            old="$(sed -n -e "${line_num}p" -- "$CHECKFILE" | cut -d ' ' -f 1)"
+            new="$($COMMAND -- "$file")"
+            # Should never happen, but double check these aren't empty:
+            if [ -z ${old:+x} ] || [ -z ${new:+x} ]; then
+                continue
+            fi
+            # `sed -i` isn't POSIX (nor is `mktemp`), so use `ex` instead.
+            if [ "$old" != "${new%% *}" ]; then
+                cat << EOF | ex -s -- "$CHECKFILE"
+${line_num}c
+$new
+.
+x
+EOF
+                # Bail immediately if something went wrong.
+                [ $? -ne 0 ] && fail "Failed to update checksum file."
+
+                # Print what checksums were changed.
+                if [ $VERBOSE -eq 1 ]; then
+                    printf '%s' "CHANGED: "
+                    printf_sanitized "$file"
+                fi
+            fi
+        fi
+    done
+fi
+
+# Append checksums for files that have no checksum yet.
+if [ $APPEND_MODE -eq 1 ] || [ $UPDATE_MODE -eq 1 ]; then
+    for file in $(find_safe "$@"); do
+        # Avoid `grep -E` as filename characters might get interpreted (eg, $).
+        # The first grep isn't strictly needed, but grep+cut+grep is faster
+        # than just cut+grep here.
+        if [ ! -f "$CHECKFILE" ] || ! grep -- "$file" "$CHECKFILE" \
+                            | cut -d ' ' -f 3- | grep -Fxq -- "$file"; then
+            if ! $COMMAND -- "$file" >> "$CHECKFILE"; then
+                fail "Failed to write to checksum file."
+            fi
+
+            # Print what checksums were appended.
+            if [ $VERBOSE -eq 1 ]; then
+                printf '%s' "ADDED: "
+                printf_sanitized "$file"
+            fi
+        fi
+    done
+fi

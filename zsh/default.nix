@@ -1,10 +1,28 @@
 {
 
-  pkgs ? (import ../pkgs.nix) {},
+  pkgs ? (import ../pkgs.nix).stable {},
+  config,
 
 }: rec {
 
   ohMyZsh = ./oh-my-zsh;
+
+  bin = pkgs.buildEnv {
+    name = "mediocregopher-bin";
+    paths = [
+      (pkgs.stdenv.mkDerivation {
+        name = "mediocregopher-default-bin";
+        src = ../bin;
+        builder = builtins.toFile "builder.sh" ''
+          source $stdenv/setup
+          mkdir -p "$out"
+          cp -rL "$src" "$out"/bin
+        '';
+      })
+    ] ++ (
+      builtins.map (cFn: cFn pkgs) config.binExtra
+    );
+  };
 
   zshrc = pkgs.writeTextDir ".zshrc" ''
 
@@ -16,10 +34,15 @@
     plugins=(git vi-mode)
     source $ZSH/oh-my-zsh.sh
 
-    PATH=${../bin}:$PATH
+    export PATH=${bin}/bin:$PATH
+
+    #Global stuff shitty programs use
+    export EDITOR=~/.nix-profile/bin/nvim
+
+    # GPG is needy
+    export GPG_TTY=$(tty)
 
     . ${./zshrc}
-    . ${./env}
     . ${./aliases}
     . ${pkgs.nix}/etc/profile.d/nix.sh
   '';

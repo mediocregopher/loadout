@@ -1,19 +1,6 @@
-{
+{}: rec {
 
-  pkgs ? (import ../pkgs.nix) {},
-
-}: rec {
-
-  goimports = pkgs.buildGoModule rec {
-    pname = "goimports";
-    version = "v0.1.7";
-    src = builtins.fetchGit {
-      url = "https://go.googlesource.com/tools";
-      rev = "0df0ca0f43117120bd7cc900ebf765f9b799438a";
-    };
-    vendorSha256 = "1vs4vbl3kh8lbqrm4yqqn27ammlqj7jdbi0ca9s4fkja2sk45ibi";
-    subPackages = [ "cmd/goimports" ];
-  };
+  pkgs = (import ../pkgs.nix).stable2305 {};
 
   misspell = pkgs.buildGoPackage rec {
     pname = "misspell";
@@ -30,36 +17,10 @@
     goDeps = ./misspellDeps.nix;
   };
 
-  # the gocode-gomod which comes with nixpkgs places the binary at
-  # gocode-gomod, we gotta rename it
-  gocode = pkgs.stdenv.mkDerivation {
-    name = "gocode";
-    src = pkgs.gocode-gomod;
-    builder = builtins.toFile "builder.sh" ''
-      source $stdenv/setup
-      mkdir -p "$out"/bin/
-      cp "$src"/bin/gocode-gomod "$out"/bin/gocode
-    '';
-  };
-
   env = pkgs.buildEnv {
     name = "nvim-env";
     paths = [
-      pkgs.vimPlugins.vim-plug
-      pkgs.vimPlugins.deoplete-nvim
-      pkgs.vimPlugins.deoplete-go
-      pkgs.vimPlugins.nerdtree
-      pkgs.vimPlugins.nerdtree-git-plugin
-      pkgs.vimPlugins.vim-gitgutter
-      pkgs.vimPlugins.neomake
-      pkgs.vimPlugins.papercolor-theme
-      pkgs.vimPlugins.vim-go
-      pkgs.vimPlugins.vim-nix
-
-      pkgs.golangci-lint
-      pkgs.gopls
-      gocode
-      goimports
+      pkgs.shellcheck
       misspell
     ];
   };
@@ -67,18 +28,18 @@
   envPlugins = "${env}/share/vim-plugins";
 
   init = pkgs.writeText "nvim-init" ''
-    source ${envPlugins}/vim-plug/plug.vim
+    source ${pkgs.vimPlugins.vim-plug}/plug.vim
 
-    call plug#begin('${envPlugins}')
-    Plug '${envPlugins}/deoplete-nvim'
-    Plug '${envPlugins}/deoplete-go', { 'for': 'go' }
-    Plug '${envPlugins}/nerdtree', { 'on':  'NERDTreeToggle' }
-    Plug '${envPlugins}/nerdtree-git-plugin'
-    Plug '${envPlugins}/vim-gitgutter'
-    Plug '${envPlugins}/neomake'
-    Plug '${envPlugins}/papercolor-theme'
-    Plug '${envPlugins}/vim-go', { 'for': 'go' }
-    Plug '${envPlugins}/vim-nix', { 'for': 'nix' }
+    call plug#begin()
+    Plug '${pkgs.vimPlugins.deoplete-nvim}'
+    Plug '${pkgs.vimPlugins.nerdtree}', { 'on':  'NERDTreeToggle' }
+    Plug '${pkgs.vimPlugins.nerdtree-git-plugin}'
+    Plug '${pkgs.vimPlugins.vim-gitgutter}'
+    Plug '${pkgs.vimPlugins.neomake}'
+    Plug '${pkgs.vimPlugins.papercolor-theme}'
+    Plug '${pkgs.vimPlugins.vim-go}', { 'for': 'go' }
+    Plug '${pkgs.vimPlugins.vim-nix}', { 'for': 'nix' }
+    Plug '${pkgs.vimPlugins.rust-vim}', { 'for': 'rust' }
     call plug#end()
 
     source ${./init.vim}
@@ -92,12 +53,12 @@
 
   rplugin = pkgs.stdenv.mkDerivation {
     name = "nvim-rplugin";
-    buildInputs = [ pkgs.git nvimRaw ];
+    buildInputs = [ pkgs.git pkgs.tree nvimRaw ];
     builder = builtins.toFile "builder.sh" ''
       source $stdenv/setup
       mkdir -p "$out"/
       export NVIM_RPLUGIN_MANIFEST="$out"/rplugin.vim
-      nvim -c ':UpdateRemotePlugins' -c ':exit' >/dev/null
+      nvim -i NONE -c ':UpdateRemotePlugins' -c ':exit' >/dev/null
     '';
   };
 

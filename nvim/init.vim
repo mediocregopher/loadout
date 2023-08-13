@@ -1,16 +1,23 @@
+
+set noswapfile
+
 " PaperColor ###############################################################
 
 set background=light
 colorscheme PaperColor
 
 " Deoplete #################################################################
+
 let g:deoplete#enable_at_startup = 1
 " use tab to cycle
 inoremap <expr><tab> pumvisible() ? "\<c-n>" : "\<tab>"
 " close preview when leaving insert
 autocmd InsertLeave,CompleteDone * if pumvisible() == 0 | pclose | endif
+" use omni completion for go, provided by vim-go
+call deoplete#custom#option('omni_patterns', { 'go': '[^. *\t]\.\w*' })
 
 " NERDTree #################################################################
+
 let NERDTreeMouseMode=3
 let NERDTreeMinimalUI=1
 let NERDTreeAutoDeleteBuffer=1
@@ -33,11 +40,16 @@ map <C-n> :NERDTreeToggle<CR>
 autocmd BufEnter * if &buftype == 'terminal' | :startinsert | endif
 
 " vim-go ###################################################################
-"
-"use goimports for formatting instead of gofmt
-let g:go_fmt_command = "goimports"
+
+let g:go_fmt_autosave = 1
+let g:go_fmt_command="goimports"
+
+" rust.vim ###################################################################
+
+let g:rustfmt_autosave = 1
 
 " neomake ##################################################################
+
 autocmd! BufWritePost * Neomake
 "let g:neomake_verbose=3
 "let g:neomake_logfile='/tmp/neomake.log'
@@ -49,35 +61,6 @@ autocmd! BufWritePost * Neomake
 let g:neomake_open_list=0
 let g:neomake_place_signs=0
 
-let g:neomake_go_enabled_makers = ['go', 'golangcilint']
-let g:neomake_go_golangcilint_maker = {
-    \ 'exe': 'golangci-lint',
-    \ 'args': [
-        \ 'run',
-        \ '--no-config',
-        \ '--out-format=line-number',
-        \ '--print-issued-lines=false',
-        \ '-E=durationcheck',
-        \ '-E=errorlint',
-        \ '-E=exportloopref',
-        \ '-E=forbidigo',
-        \ '-E=gochecknoinits',
-        \ '-E=godot',
-        \ '-E=goimports',
-        \ '-E=misspell',
-        \ '-E=revive',
-        \ '-E=unconvert',
-        \ '-E=unparam',
-        \ '.'
-    \ ],
-    \ 'output_stream': 'stdout',
-    \ 'append_file': 0,
-    \ 'cwd': '%:h',
-    \ 'errorformat':
-        \ '%f:%l:%c: %m,' .
-        \ '%f:%l: %m'
-    \ }
-
 let g:neomake_markdown_enabled_makers = ['misspell']
 let g:neomake_markdown_misspell_maker = {
     \ 'errorformat': '%f:%l:%c:%m',
@@ -88,11 +71,7 @@ let g:neomake_markdown_misspell_maker = {
 "Makes current line/column highlighted, and set text width
 set tw=80
 set colorcolumn=+1
-"autocmd bufenter * set cursorline   cursorcolumn   colorcolumn=+1
-"autocmd bufleave * set nocursorline nocursorcolumn colorcolumn=0
 hi ColorColumn ctermfg=none ctermbg=grey cterm=none
-"hi CursorLine ctermfg=none ctermbg=lightgrey cterm=none
-"hi CursorColumn ctermfg=none ctermbg=lightgrey cterm=none
 
 "Buffers scroll a bit so cursor doens't go all the way to the bottom before
 "scroll begins
@@ -123,6 +102,7 @@ au FileType yaml       setlocal tabstop=2 shiftwidth=2
 au FileType html       setlocal tabstop=2 shiftwidth=2
 au FileType proto      setlocal tabstop=2 shiftwidth=2
 au FileType javascript setlocal tabstop=2 shiftwidth=2
+au FileType typescript setlocal tabstop=2 shiftwidth=2
 
 "We want certain types to use tabs instead of spaces
 au FileType go      setlocal nolist noexpandtab
@@ -159,6 +139,9 @@ noremap <leader>tx :tabclose<CR>
 
 " yank/paste into/from clipboard
 set clipboard+=unnamedplus
+
+" Enable mouse in all modes
+set mouse=
 
 "Clojure specific mappings
 " Eval outerform
