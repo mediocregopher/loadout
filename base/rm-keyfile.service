@@ -1,9 +1,0 @@
-[Unit]
-Description=rm keyfile
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'rm /boot/keyfile || true'
-
-[Install]
-WantedBy=multi-user.target

@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-/usr/bin/sshfs -oTCPKeepAlive=yes -oServerAliveCountMax=1 -oServerAliveInterval=5 $@
